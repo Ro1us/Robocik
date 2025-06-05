@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Joystick Touchpad</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ddd">
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    #touchpad {
+      width: 80vw;
+      height: 80vw;
+      max-width: 400px;
+      max-height: 400px;
+      background: #ddd;
+      border-radius: 20px;
+      margin: auto;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Joystick Touchpad</h2>
+  <div id="touchpad"></div>
+  <p>X: <span id="xVal">0</span>, Y: <span id="yVal">0</span></p>
+
+  <script>
+    const pad = document.getElementById('touchpad');
+    const xVal = document.getElementById('xVal');
+    const yVal = document.getElementById('yVal');
+
+    let startX = 0, startY = 0;
+
+    pad.addEventListener('pointerdown', (e) => {
+      startX = e.clientX;
+      startY = e.clientY;
+      pad.setPointerCapture(e.pointerId);
+    });
+
+    pad.addEventListener('pointermove', (e) => {
+      if (e.pressure === 0) return;
+
+      let dx = e.clientX - startX;
+      let dy = e.clientY - startY;
+
+      const max = 100;
+      dx = Math.max(-max, Math.min(max, dx));
+      dy = Math.max(-max, Math.min(max, dy));
+
+      const x = Math.round(dx);
+      const y = Math.round(-dy);
+
+      xVal.textContent = x;
+      yVal.textContent = y;
+
+      sendToRobot(x, y);
+    });
+
+    pad.addEventListener('pointerup', (e) => {
+      xVal.textContent = 0;
+      yVal.textContent = 0;
+      sendToRobot(0, 0);
+    });
+
+    function sendToRobot(x, y) {
+      const ip = '192.168.1.123';
+      fetch(`http://${ip}/control?x=${x}&y=${y}`).catch(() => {});
+    }
+  </script>
+</body>
+</html>
