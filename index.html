@@ -1,76 +1,206 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
-  <meta charset="UTF-8">
-  <title>Joystick Touchpad</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#ddd">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#222222"/>
+  <link rel="manifest" href="manifest.json" />
+  <title>Roborex</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
+    html, body {
+      height: 100%;
       margin: 0;
-      padding: 20px;
+      background: #111;
+      font-family: sans-serif;
+      overflow: hidden;
+      color: white;
+      display: flex;
+      flex-direction: column;
     }
-    #touchpad {
-      width: 80vw;
-      height: 80vw;
-      max-width: 400px;
-      max-height: 400px;
-      background: #ddd;
-      border-radius: 20px;
-      margin: auto;
+    #panel {
+      padding: 10px;
+      text-align: center;
+    }
+    .led-row {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+      margin: 5px 0;
+    }
+    .led {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background-color: #222;
+      border: 1px solid #555;
+    }
+    .led.red.on { background-color: red; }
+    .led.yellow.on { background-color: yellow; }
+    .led.green.on { background-color: lime; }
+    input[type="text"] {
+      padding: 5px;
+      font-size: 1em;
+      width: 80%;
+      margin-top: 5px;
+      text-align: center;
+    }
+    #sensors {
+      display: flex;
+      justify-content: space-around;
+      text-align: center;
+      margin-top: 10px;
+    }
+    .sensor-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .distance-box {
+      background: #222;
+      padding: 5px 10px;
+      border-radius: 5px;
+      margin-bottom: 5px;
+      min-width: 80px;
+    }
+    #strefa {
+      flex: 1;
       touch-action: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
   </style>
 </head>
 <body>
-  <h2>Joystick Touchpad</h2>
-  <div id="touchpad"></div>
-  <p>X: <span id="xVal">0</span>, Y: <span id="yVal">0</span></p>
+  <div id="panel">
+    <div>Adres robota:</div>
+    <input type="text" id="ipInput" value="192.168.0.180" />
+    <div id="sensors">
+      <div class="sensor-block">
+        <div>Bezpieczna przestrzeń przód:</div>
+        <div class="distance-box" id="distance-front">-</div>
+        <div>Czujnik parkowania przód</div>
+        <div class="led-row" id="leds-front">
+          <div class="led red"></div>
+          <div class="led yellow"></div>
+          <div class="led green"></div>
+        </div>
+      </div>
+      <div class="sensor-block">
+        <div>Bezpieczna przestrzeń tył:</div>
+        <div class="distance-box" id="distance-back">-</div>
+        <div>Czujnik parkowania tył</div>
+        <div class="led-row" id="leds-back">
+          <div class="led red"></div>
+          <div class="led yellow"></div>
+          <div class="led green"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
+  <div id="strefa"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
   <script>
-    const pad = document.getElementById('touchpad');
-    const xVal = document.getElementById('xVal');
-    const yVal = document.getElementById('yVal');
-
-    let startX = 0, startY = 0;
-
-    pad.addEventListener('pointerdown', (e) => {
-      startX = e.clientX;
-      startY = e.clientY;
-      pad.setPointerCapture(e.pointerId);
+    let ip = document.getElementById('ipInput').value;
+    document.getElementById('ipInput').addEventListener('input', () => {
+      ip = document.getElementById('ipInput').value;
     });
 
-    pad.addEventListener('pointermove', (e) => {
-      if (e.pressure === 0) return;
-
-      let dx = e.clientX - startX;
-      let dy = e.clientY - startY;
-
-      const max = 100;
-      dx = Math.max(-max, Math.min(max, dx));
-      dy = Math.max(-max, Math.min(max, dy));
-
-      const x = Math.round(dx);
-      const y = Math.round(-dy);
-
-      xVal.textContent = x;
-      yVal.textContent = y;
-
-      sendToRobot(x, y);
+    const joystick = nipplejs.create({
+      zone: document.getElementById('strefa'),
+      mode: 'static',
+      position: { left: '50%', top: '50%' },
+      color: 'red'
     });
 
-    pad.addEventListener('pointerup', (e) => {
-      xVal.textContent = 0;
-      yVal.textContent = 0;
-      sendToRobot(0, 0);
+    let lastSentX = 0;
+    let lastSentY = 0;
+    const sendInterval = 100;
+    let lastSendTime = 0;
+
+    joystick.on('move', function(evt, data) {
+      const now = Date.now();
+      if (now - lastSendTime > sendInterval) {
+        if (data && data.vector) {
+          const x = Math.round(data.vector.x * 100);
+          const y = Math.round(data.vector.y * 100);
+          if (x !== lastSentX || y !== lastSentY) {
+            fetch(`http://${ip}/control/${x},${y}`).catch(() => {});
+            lastSentX = x;
+            lastSentY = y;
+            lastSendTime = now;
+          }
+        }
+      }
     });
 
-    function sendToRobot(x, y) {
-      const ip = '192.168.1.123';
-      fetch(`http://${ip}/control?x=${x}&y=${y}`).catch(() => {});
+    joystick.on('end', function() {
+      fetch(`http://${ip}/control/0,0`).catch(() => {});
+      lastSentX = 0;
+      lastSentY = 0;
+    });
+
+    function updateLEDs(selector, states) {
+      const leds = document.querySelectorAll(selector + " .led");
+      leds.forEach((led, index) => {
+        if (states[index]) {
+          led.classList.add("on");
+        } else {
+          led.classList.remove("on");
+        }
+      });
+    }
+
+    function parseSensorData(text) {
+      if (!text || typeof text !== "string" || text.trim().toLowerCase() === "none") {
+        console.warn("Pusta lub nieprawidłowa odpowiedź:", text);
+        return;
+      }
+
+      const parts = text.trim().split(",");
+      if (parts.length !== 8) {
+        console.warn("Nieprawidłowy format danych:", parts);
+        return;
+      }
+
+      const front = parseInt(parts[0]);
+      const back = parseInt(parts[1]);
+      if (isNaN(front) || isNaN(back)) return;
+
+      const leds = parts.slice(2).map(val => val.trim().toUpperCase() === "TRUE");
+
+      updateLEDs("#leds-front", leds.slice(0, 3));
+      updateLEDs("#leds-back", leds.slice(3));
+      document.getElementById("distance-front").textContent = front;
+      document.getElementById("distance-back").textContent = back;
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function sensorLoop() {
+      while (true) {
+        try {
+          const res = await fetch(`http://${ip}/sensors`);
+          const text = await res.text();
+          parseSensorData(text);
+        } catch (err) {
+          updateLEDs("#leds-front", [false,false,false]);
+          updateLEDs("#leds-back", [false,false,false]);
+          document.getElementById("distance-front").textContent = "-";
+          document.getElementById("distance-back").textContent = "-";
+        }
+        await sleep(1500);
+      }
+    }
+
+    sensorLoop();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
     }
   </script>
 </body>
